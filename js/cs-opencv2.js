@@ -106,7 +106,23 @@
     def('Mean', (a) => { const s = guard(() => (a.length > 1 && a[1] ? cv.mean(asMat(a[0]), asMat(a[1])) : cv.mean(asMat(a[0])))); return new Scalar(s[0], s[1], s[2], s[3]); }, 'Scalar');
     def('Sum', (a) => sumScalar(asMat(a[0])), 'Scalar');
     def('CountNonZero', (a) => guard(() => cv.countNonZero(asMat(a[0]))), 'int');
-    def('FindNonZero', (a) => { const s = asMat(a[0]); if (a[1] instanceof Mat) return guard(() => cv.findNonZero(s, a[1].cv)); const d = new cv.Mat(); try { guard(() => cv.findNonZero(s, d)); return ptsArr(matToPoints(d, 'Point'), 'Point'); } finally { d.delete(); } }, 'Point[]');
+    // OpenCV.js 빌드에 cv.findNonZero 가 없어 직접 구현한다 (1채널 Mat 의 0 이 아닌 픽셀 좌표)
+    function findNonZeroPoints(m) {
+      if (m.channels() !== 1) throw new CsException('OpenCVException', 'FindNonZero 에는 1채널 이미지가 필요합니다 (먼저 Gray 로 바꾸거나 이진화하세요)');
+      const src = m.isContinuous() ? m : m.clone();
+      try {
+        const d = DEPTH_ARR(src), w = src.cols, h = src.rows, out = [];
+        for (let y = 0; y < h; y++) { const row = y * w; for (let x = 0; x < w; x++) if (d[row + x] !== 0) out.push(new Point(x, y)); }
+        out.__elem = 'Point';
+        return out;
+      } finally { if (src !== m) src.delete(); }
+    }
+    def('FindNonZero', (a) => {
+      const pts = findNonZeroPoints(asMat(a[0]));
+      if (a[1] instanceof Mat) { const dst = a[1].cv; const flat = []; pts.forEach((p) => flat.push(p.X, p.Y)); const tmp = cv.matFromArray(Math.max(pts.length, 1), 1, cv.CV_32SC2, flat.length ? flat : [0, 0]); try { if (pts.length) tmp.copyTo(dst); else dst.create(0, 1, cv.CV_32SC2); } finally { tmp.delete(); } return; }
+      if (a[1] instanceof Ref) { a[1].set(pts); return; }
+      return pts;
+    }, 'Point[]');
     def('MeanStdDev', (a) => { const m = new cv.Mat(), sd = new cv.Mat(); try { guard(() => (a.length > 3 && a[3] ? cv.meanStdDev(asMat(a[0]), m, sd, asMat(a[3])) : cv.meanStdDev(asMat(a[0]), m, sd))); const ms = new Scalar(...Array.from({ length: 4 }, (_, k) => (k < m.rows ? m.data64F[k] : 0))); const ss = new Scalar(...Array.from({ length: 4 }, (_, k) => (k < sd.rows ? sd.data64F[k] : 0))); if (a[1] instanceof Ref) { a[1].set(ms); a[2].set(ss); } else { m.copyTo(outMat(a[1])); sd.copyTo(outMat(a[2])); } } finally { m.delete(); sd.delete(); } }, 'void');
     def('MinMaxLoc', (a) => {
       const s = asMat(a[0]);
@@ -287,9 +303,11 @@
       const m = new cv.Mat(h0, w0, cv.CV_8UC1, new cv.Scalar(0));
       try {
         cv.putText(m, text, new cv.Point(10, Math.round(h0 * 0.6)), font, scale, new cv.Scalar(255), Math.max(1, thick), 8, false);
-        const nz = new cv.Mat(); cv.findNonZero(m, nz);
-        if (!nz.rows) { nz.delete(); return { w: 0, h: 0, baseLine: 0 }; }
-        const r = cv.boundingRect(nz); nz.delete();
+        const pts = findNonZeroPoints(m);
+        if (!pts.length) return { w: 0, h: 0, baseLine: 0 };
+        let x1 = Infinity, y1 = Infinity, x2 = -Infinity, y2 = -Infinity;
+        for (const p of pts) { if (p.X < x1) x1 = p.X; if (p.X > x2) x2 = p.X; if (p.Y < y1) y1 = p.Y; if (p.Y > y2) y2 = p.Y; }
+        const r = { x: x1, y: y1, width: x2 - x1 + 1, height: y2 - y1 + 1 };
         const baseY = Math.round(h0 * 0.6);
         return { w: r.width + Math.round(2 * scale), h: Math.max(0, baseY - r.y), baseLine: Math.max(0, r.y + r.height - baseY) + Math.max(1, thick) };
       } finally { m.delete(); }

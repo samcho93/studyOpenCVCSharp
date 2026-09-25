@@ -294,6 +294,13 @@
     if (typeof a.csEquals === 'function') return a.csEquals(b);
     return false;
   }
+  /** 위임(delegate) 결합 대상인가: 한쪽이 함수이고 다른 쪽은 함수이거나 null */
+  const isFuncVal = (v) => typeof v === 'function' || v instanceof CsFunc;
+  function isDelegateLike(cur, rhs) {
+    if (isFuncVal(rhs)) return cur == null || isFuncVal(cur);
+    if (isFuncVal(cur)) return rhs == null;
+    return false;
+  }
   function truthy(v) { if (typeof v === 'boolean') return v; if (v == null) throw new CsException('NullReferenceException', 'bool 값이 필요한 곳에 null 이 왔습니다'); if (typeof v === 'number') throw new CsException('InvalidCastException', 'C# 에서 숫자는 조건식으로 쓸 수 없습니다. 비교 연산(!= 0 등)을 쓰세요'); return !!v; }
 
   // ================================================================== 범위(스코프)
@@ -1176,6 +1183,9 @@
           if (list) { const args = this.evalArgs(e.args, scope); return this.invokeUserMethods(list, thisObj, args, e); }
           if (d.propDecls && d.propDecls.has(c.name)) { const f = this.evalPropGet(d.propDecls.get(c.name), thisObj, d); return this.invokeValue(f, this.evalArgs(e.args, scope), e, typeArgs); }
         }
+        // 위임(delegate)을 담은 필드 · 속성을 이름으로 호출: handler("값")
+        const memberRef = this.resolveMemberOnThis(c.name, scope);
+        if (memberRef) return this.invokeValue(memberRef.get(), this.evalArgs(e.args, scope), e, typeArgs);
         for (const d of this.usingStatic) { const st = d.statics[c.name]; if (st && st.fn) { const args = this.evalArgs(e.args, scope); return st.fn(this, args.map((a) => a.v), typeArgs, e, args); } if (st && st.method) return this.invokeUserMethods(st.method, null, this.evalArgs(e.args, scope), e); }
         if (thisObj && /^(GetType|ToString|GetHashCode|Equals|MemberwiseClone)$/.test(c.name)) {
           const vals = this.evalArgs(e.args, scope).map((a) => a.v);
@@ -1515,7 +1525,8 @@
       let nv;
       if (op === '+' && (typeof cur === 'string' || typeof rhs === 'string')) nv = fmt(cur, this.typeOf(e.target, scope)) + fmt(rhs, this.typeOf(e.value, scope));
       else if (cur instanceof CsChar && typeof rhs === 'number') nv = new CsChar(this.binaryOp(op, cur.code, rhs, e, scope));
-      else if (cur && typeof cur === 'object' && !(cur instanceof CsChar) && !(cur instanceof CsEnumVal) && (typeof cur.csDelegateAdd === 'function' || cur instanceof CsFunc || typeof cur === 'function') && (op === '+' || op === '-')) {
+      else if ((op === '+' || op === '-') && isDelegateLike(cur, rhs)) {
+        // 이벤트 · 위임(delegate) 결합: handler += 람다 / -= 람다 (cur 가 null 이어도 등록된다)
         nv = this.combineDelegates(cur, rhs, op);
       } else nv = this.binaryOp(op, cur, rhs, e, scope);
       // 정적 형식에 맞게 (byte b; b += 1 → byte)
