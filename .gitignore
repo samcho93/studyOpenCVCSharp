@@ -1,0 +1,11 @@
+node_modules/
+__pycache__/
+*.pyc
+.vs/
+bin/
+obj/
+*.user
+*.suo
+.DS_Store
+Thumbs.db
+tools/dbg*.mjs

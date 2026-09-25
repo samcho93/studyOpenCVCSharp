@@ -1,0 +1,90 @@
+/* OpenCV · C# 강좌 추가 스타일: 언어 칩 · 이미지 창 · 확대 보기 · 작업 폴더 · WPF 안내 */
+:root {
+  --accent: #6d3fd1;          /* C# · .NET 보라 */
+  --accent-soft: #efe9fb;
+  --accent2: #0e7490;         /* OpenCV 청록 */
+  --accent2-soft: #e0f4f8;
+  --cs: #6d3fd1;
+  --cs-soft: #efe9fb;
+}
+:root[data-theme="dark"] {
+  --accent: #a78bfa;
+  --accent-soft: #2a2247;
+  --accent2: #38bdf8;
+  --accent2-soft: #10283a;
+  --cs: #a78bfa;
+  --cs-soft: #2a2247;
+}
+.brand-logo { background: linear-gradient(135deg, #512bd4, #0e7490); box-shadow: 0 2px 8px rgba(81, 43, 212, .35); }
+.hero { background: radial-gradient(circle at 85% 20%, rgba(255, 255, 255, .18), transparent 40%), linear-gradient(135deg, #512bd4 0%, #3b2a8f 50%, #0e7490 100%); }
+
+/* ---------------------------------------------------------------- 네비 도구 */
+.nav-tools { display: flex; gap: 6px; margin: 0 0 8px; }
+.nav-tool { flex: 1; text-align: center; font: 600 13px var(--sans); padding: 6px 8px; border-radius: 8px; border: 1px solid var(--line);
+  background: var(--card); color: var(--fg); cursor: pointer; text-decoration: none; }
+.nav-tool:hover { border-color: var(--accent); color: var(--accent); }
+.nav-foot { display: flex; flex-direction: column; gap: 6px; }
+
+/* ---------------------------------------------------------------- 언어 칩 · 코드 블록 */
+.lang-tabs, .s-lang { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--card); vertical-align: middle; }
+.lang-tabs .lt { border: 0; background: transparent; color: var(--muted); font: 600 12.5px var(--sans); padding: 3px 10px; cursor: pointer; }
+.lang-tabs .lt + .lt { border-left: 1px solid var(--line); }
+.files-tabs .lt.active { background: var(--accent); color: #fff; }
+.lang-chip { font-size: 11.5px; padding: 1px 8px; color: var(--cs); border-color: var(--cs); }
+.local-chip { font-size: 11.5px; padding: 1px 8px; color: var(--warn); border-color: var(--warn); }
+.code-pane[data-lang="cs"] pre { border-left: 3px solid var(--cs); }
+.code-pane[data-lang="xml"] pre, .code-pane[data-lang="xaml"] pre { border-left: 3px solid #d97706; }
+.code-pane[data-lang="sh"] pre, .code-pane[data-lang="ps"] pre { border-left: 3px solid var(--muted); }
+.norun-note { font-size: 12.5px; color: var(--muted); padding: 6px 14px; border-top: 1px dashed var(--line); background: var(--card2); }
+.code-block .expect { border-top: 1px solid var(--line); }
+.cm-s-default .cm-keyword, .CodeMirror .cm-keyword { color: var(--tk-keyword); }
+
+/* ---------------------------------------------------------------- 콜아웃 (WPF · Visual Studio) */
+.callout.wpf { border-left-color: #0078d4; background: color-mix(in srgb, #0078d4 7%, var(--card)); }
+.callout.wpf .ct { color: #0078d4; }
+:root[data-theme="dark"] .callout.wpf .ct { color: #60b4ff; }
+.callout.vs { border-left-color: #8b5cf6; background: color-mix(in srgb, #8b5cf6 7%, var(--card)); }
+.callout.vs .ct { color: #7c3aed; }
+:root[data-theme="dark"] .callout.vs .ct { color: #c4b5fd; }
+.callout.field { border-left-color: #0e7490; background: color-mix(in srgb, #0e7490 7%, var(--card)); }
+.callout.field .ct { color: #0e7490; }
+:root[data-theme="dark"] .callout.field .ct { color: #38bdf8; }
+.callout .meta-row { margin: 10px 0 0; }
+.figure img.asset-img { display: block; margin: 0 auto; max-width: 100%; border-radius: 8px; border: 1px solid var(--line); cursor: zoom-in; image-rendering: auto; }
+
+/* ---------------------------------------------------------------- 이미지 창 (결과 창) */
+.imwin { display: block; margin: 6px 0 10px; border: 1px solid #2d3643; border-radius: 8px; overflow: hidden; background: #1a1f27; box-shadow: 0 2px 10px rgba(0,0,0,.35); }
+.imwin-bar { display: flex; align-items: center; gap: 8px; padding: 4px 8px; font: 600 12px var(--sans); color: #cfd6e2; background: #242b36; border-bottom: 1px solid #2d3643; white-space: nowrap; }
+.imwin-name { color: #fff; overflow: hidden; text-overflow: ellipsis; max-width: 45%; }
+.imwin-dim { color: #8d97a8; font: 11px var(--mono); }
+.imwin-px { color: #7ee787; font: 11px var(--mono); overflow: hidden; text-overflow: ellipsis; }
+.imwin-btn { border: 1px solid #3a4452; background: #1a1f27; color: #cfd6e2; border-radius: 5px; padding: 0 6px; cursor: pointer; font-size: 12px; }
+.imwin-btn:hover { border-color: var(--accent); color: #fff; }
+.imwin-body { display: flex; justify-content: center; background: repeating-conic-gradient(#20252d 0% 25%, #1a1f27 0% 50%) 50% / 16px 16px; }
+.imwin-body canvas { display: block; max-width: 100%; max-height: var(--imwin-max-h, 60vh); width: auto; height: auto; image-rendering: pixelated; cursor: crosshair; }
+
+/* ---------------------------------------------------------------- 확대 보기 */
+.iv-back { position: fixed; inset: 0; z-index: 3000; background: rgba(5, 8, 12, .72); display: flex; align-items: center; justify-content: center; padding: 3vh 3vw; }
+.iv-card { width: 100%; height: 100%; display: flex; flex-direction: column; background: var(--pane); border-radius: 12px; overflow: hidden; box-shadow: 0 10px 40px rgba(0,0,0,.5); }
+.iv-head { display: flex; align-items: center; gap: 6px; padding: 8px 12px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.iv-px { font: 12.5px var(--mono); color: var(--accent); margin-right: 8px; }
+.iv-stage { flex: 1; position: relative; overflow: hidden; cursor: grab; touch-action: none; }
+.iv-stage:active { cursor: grabbing; }
+.iv-stage canvas { position: absolute; inset: 0; }
+.iv-foot { padding: 4px 12px; font-size: 12px; border-top: 1px solid var(--line); }
+
+/* ---------------------------------------------------------------- 작업 폴더 */
+.asset-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 8px; margin: 8px 0; }
+.asset-tile { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; cursor: zoom-in; background: var(--card); display: flex; flex-direction: column; }
+.asset-tile:hover { border-color: var(--accent); }
+.asset-tile img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; background: #222; display: block; }
+.asset-tile span { font: 11px var(--mono); padding: 3px 5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.modal .err { color: var(--danger); }
+
+/* ---------------------------------------------------------------- 슬라이드 언어 칩 · 사진 */
+.s-lang-chip { margin-left: 8px; font: 600 1cqw var(--sans); color: var(--muted); }
+.s-lang-chip.local { color: var(--warn); }
+.s-img { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: .6cqw; cursor: zoom-in; }
+
+/* ---------------------------------------------------------------- 결과 창: 파일 저장 표시 */
+.console .diag .e { font-weight: 700; }

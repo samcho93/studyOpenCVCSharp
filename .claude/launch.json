@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "site",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["server/serve.py", "--port", "8086"],
+      "port": 8086
+    }
+  ]
+}
