@@ -569,7 +569,8 @@ class Program
         Cv2.Threshold(img, mask, 0, 255, ThresholdTypes.BinaryInv | ThresholdTypes.Otsu);  // 어두운 부품 = 255
         color.SetTo(Scalar.Red, mask);        // 부품 자리를 빨갛게
         Console.WriteLine($"마스크 픽셀 수: {Cv2.CountNonZero(mask)}");
-        Console.WriteLine($"부품 위치 (90,90) = {color.At<Vec3b>(90, 90)}");
+        Console.WriteLine($"와셔 몸통 (y=60, x=90) = {color.At<Vec3b>(60, 90)}");   // 빨갛게 칠해짐
+        Console.WriteLine($"배경 (y=10, x=10)      = {color.At<Vec3b>(10, 10)}");   // 그대로
         Cv2.ImShow("float 0~1", f);
         Cv2.ImShow("SetTo(Red, mask)", color);
         Cv2.WaitKey(0);
@@ -655,7 +656,7 @@ class Program
     id: 'cs03', no: '03', title: 'Mat 과 픽셀: 이미지 자료 구조', subtitle: 'Mat 의 구조 · 픽셀 접근 · ROI 와 복사 · 산술 연산',
     summary: 'OpenCV 의 모든 이미지는 <b>Mat</b> 입니다. 행 · 열 · 채널 · 깊이로 이루어진 Mat 의 구조와 메모리 배치를 이해하고, <b>픽셀을 직접 읽고 쓰는 방법</b>((행 y, 열 x) 순서 · Vec3b), <b>ROI</b> 가 원본 메모리를 공유한다는 사실, <b>Clone/CopyTo</b> 로 복사하는 법, Mat 산술 연산자와 <b>ConvertTo/SetTo</b> 를 익힙니다. 이후 모든 차시의 기초가 되는 내용입니다.',
     goals: ['Mat 의 Rows/Cols/Channels/Depth/Type 을 읽고 MatType 이름(CV_8UC3 등)의 뜻을 설명할 수 있다', 'At&lt;T&gt;/Get/Set/GetGenericIndexer 로 픽셀을 (행, 열) 순서로 읽고 쓸 수 있다', 'ROI(참조)와 Clone/CopyTo(복사)의 차이를 설명하고 로고 삽입 · 마스크 복사를 할 수 있다', 'Mat 산술 · 비트 연산자와 ConvertTo/SetTo 를 쓰고, 채널/깊이 오류 메시지를 읽을 수 있다'],
-    wpf: 'Ch03_MatPixel',
+    wpf: 'OpenCvWpfStarter',
     sections: [
       // ================================================================ 1교시
       {
@@ -918,7 +919,8 @@ class Program
           { type: 'h', text: '컬러 픽셀: Vec3b 와 Item0 · Item1 · Item2' },
           { type: 'p', html: '3채널 Mat 의 픽셀은 <b>Vec3b</b>(Vector of 3 bytes) 입니다. <code>Item0 = B</code>, <code>Item1 = G</code>, <code>Item2 = R</code> — OpenCV 의 BGR 순서 그대로입니다. <code>new Vec3b(b, g, r)</code> 로 만들어 <code>Set</code> 이나 인덱서로 쓸 수 있습니다.' },
           { type: 'code', title: '예제 2: 컬러 이미지 픽셀 읽기 · 쓰기', code: EX2_COLOR,
-            desc: '<code>images/sample_color.png</code> 의 빨간 원 중심은 (x=120, y=110) 이므로 <code>At&lt;Vec3b&gt;(110, 120)</code> 으로 읽습니다. 합성 이미지에 센서 잡음이 들어 있어 값이 기준색 (40, 40, 210) 근처에서 조금 다릅니다. 결과 창에서 노란 점(BGR 0, 255, 255)이 원 중심에 찍힌 것을 확대해 보세요.' },
+            desc: '<code>images/sample_color.png</code> 의 빨간 원 중심은 (x=120, y=110) 이므로 <code>At&lt;Vec3b&gt;(110, 120)</code> 으로 읽습니다. 합성 이미지에 센서 잡음이 들어 있어 값이 기준색 (40, 40, 210) 근처에서 조금 다릅니다. 결과 창에서 노란 점(BGR 0, 255, 255)이 원 중심에 찍힌 것을 확대해 보세요.',
+            expect: '빨간 원  : B=37 G=37 R=196\n초록 사각: B=56 G=159 R=56\n파란 삼각: B=189 G=85 R=29\nToString: Vec3b(37, 37, 196)\n바꾼 뒤 (110,120): Vec3b(0, 255, 255)' },
           { type: 'callout', kind: 'warn', title: '자료형이 맞지 않으면', html: '<code>CV_8UC1</code>(byte) Mat 을 <code>At&lt;int&gt;</code> 로 읽으면 진짜 OpenCvSharp 에서는 <b>byte 4개를 int 하나로 해석</b>해 엉뚱한 값이 나오고, 이미지 끝에서는 메모리 오류가 날 수 있습니다 (이 실습 환경은 경고를 띄워 줍니다). 3채널을 <code>At&lt;byte&gt;</code> 로 읽으면 B 값만 읽히거나 오류가 납니다. <b>Type() 을 확인하고 표 2 의 자료형을 쓰세요</b>: CV_8UC1 → byte, CV_8UC3 → Vec3b, CV_32FC1 → float, CV_16SC1 → short, CV_32SC1 → int.' },
           { type: 'h', text: '반복문으로 이미지 만들기' },
           { type: 'code', title: '예제 3: 그라데이션 만들기 (그레이 · 컬러)', code: EX2_GRADIENT,
@@ -928,10 +930,12 @@ class Program
             desc: '640×480 = 307,200 픽셀을 반복문으로 처리하면 이 브라우저 인터프리터에서 수 초, 진짜 .NET 에서도 수 ms 가 걸리지만 <code>Cv2.BitwiseNot</code> 은 네이티브 C++ 코드(SIMD 최적화)로 훨씬 빠릅니다. 두 결과가 완전히 같은지 <code>Absdiff</code> + <code>CountNonZero</code> 로 확인합니다 (0 = 같음). 시간은 PC 마다 다릅니다.' },
           { type: 'callout', kind: 'tip', title: '픽셀 반복 대신 Cv2 함수를 쓰는 이유', html: '<ul><li><b>속도</b>: Cv2 함수는 C++ 로 컴파일된 코드가 메모리를 한 번에 훑습니다. C# 반복문의 <code>At&lt;T&gt;</code> 는 호출마다 범위 검사가 들어가 수십 배 느립니다 (인터프리터는 수백 배).</li><li><b>정확성</b>: 포화 연산 · 경계 처리 · 반올림을 OpenCV 가 알아서 합니다.</li><li><b>가독성</b>: <code>Cv2.BitwiseNot(img, dst)</code> 한 줄이 이중 반복 7줄보다 읽기 쉽습니다.</li></ul>반복문은 <b>원리를 익힐 때</b>와 <b>Cv2 에 없는 특수 규칙</b>(예: 픽셀별 조건이 복잡한 분류)에만 쓰고, 그때도 <code>GetGenericIndexer</code> 를 쓰세요. 진짜 .NET 에서 극한 속도가 필요하면 <code>unsafe</code> 포인터(<code>img.DataPointer</code>)나 <code>Span&lt;byte&gt;</code> 를 씁니다 — 이 강좌 범위 밖입니다.' },
           { type: 'code', title: '예제 5: 특정 색 픽셀 세기 — 반복문과 InRange 비교', code: EX2_COUNT,
-            desc: '빨간 원 주변의 100×100 영역(10,000 픽셀)만 반복해 "R 이 크고 G, B 가 작은" 픽셀을 셉니다 — 원 넓이 π·34² ≈ 3632 와 비슷하게 나옵니다. 같은 조건을 전체 이미지에 <code>Cv2.InRange</code>(하한 ≤ 값 ≤ 상한인 픽셀을 255 로) 한 줄로 적용하면 빨간 원 <b>2개</b>가 세어집니다. 색으로 물체를 찾는 본격적인 방법(HSV)은 5차시에서 배웁니다.' },
+            desc: '빨간 원 주변의 100×100 영역(10,000 픽셀)만 반복해 "R 이 크고 G, B 가 작은" 픽셀을 셉니다 — 원 넓이 π·34² ≈ 3632 와 비슷하게 나옵니다. 같은 조건을 전체 이미지에 <code>Cv2.InRange</code>(하한 ≤ 값 ≤ 상한인 픽셀을 255 로) 한 줄로 적용하면 빨간 원 <b>2개</b>가 세어집니다. 색으로 물체를 찾는 본격적인 방법(HSV)은 5차시에서 배웁니다.',
+            expect: '반복문으로 센 빨간 픽셀 (ROI 안): 3634\n원 넓이 π×34² ≈ 3632\nInRange 로 센 빨간 픽셀 (전체): 7260' },
           { type: 'h', text: '흔한 실수 두 가지' },
           { type: 'code', title: '예제 6: (x, y) 순서 실수와 자료형 실수 잡아 보기', code: EX2_MISTAKES,
-            desc: '640×480 이미지에서 <code>At(600, 100)</code> 은 "600행" 을 요구하므로 범위 초과입니다. x=600 이 열로는 유효하기 때문에 이런 실수는 <b>가로가 긴 이미지의 오른쪽 픽셀</b>을 읽을 때 갑자기 터집니다. 두 번째는 1채널 Mat 을 Vec3b 로 읽는 경우 — 이 실습 환경은 친절한 메시지의 ArgumentException 을 던집니다.' },
+            desc: '640×480 이미지에서 <code>At(600, 100)</code> 은 "600행" 을 요구하므로 범위 초과입니다. x=600 이 열로는 유효하기 때문에 이런 실수는 <b>가로가 긴 이미지의 오른쪽 픽셀</b>을 읽을 때 갑자기 터집니다. 두 번째는 1채널 Mat 을 Vec3b 로 읽는 경우 — 이 실습 환경은 친절한 메시지의 ArgumentException 을 던집니다.',
+            expect: '크기: Rows=480, Cols=640\n실수 1 → IndexOutOfRangeException: At(600, 100) 은 (행, 열)! At(100, 600) 이 맞다\nAt(100, 600) = 25\n실수 2 → ArgumentException: CV_8UC1 은 byte 로, CV_8UC3 은 Vec3b 로 읽어야 한다' },
           { type: 'callout', kind: 'wpf', title: 'WPF 에서는', html: 'WPF 앱에서 <code>Image</code> 컨트롤 위의 마우스 좌표를 얻으면 <code>e.GetPosition(imageControl)</code> 은 <b>컨트롤 좌표</b>(x, y, double)입니다. 이미지가 컨트롤 크기에 맞춰 늘어나 있으면 <code>x * mat.Width / imageControl.ActualWidth</code> 처럼 <b>비율로 환산</b>한 뒤 <code>(int)</code> 로 잘라 <code>mat.At&lt;Vec3b&gt;((int)py, (int)px)</code> 로 읽습니다 — 여기서도 (y, x) 순서! 결과 창의 좌표 · 픽셀 값 표시가 바로 이 기능입니다 (16차시 스튜디오 앱에서 구현).' }
         ],
         practice: [
@@ -986,8 +990,9 @@ class Program
           },
           {
             title: '밝은 픽셀 세기: 반복문과 Threshold 비교', level: 2,
-            desc: '<code>images/sample_gray.png</code> 의 왼쪽 위 200×200 영역(<code>Rect(0, 0, 200, 200)</code>)에서 밝기가 <b>200 이상</b>인 픽셀 수를 반복문으로 세세요. 그다음 같은 영역을 ROI 로 잘라 <code>Cv2.Threshold(roi, bin, 199, 255, ThresholdTypes.Binary)</code> + <code>Cv2.CountNonZero</code> 로 센 값과 같은지 출력하세요.',
+            desc: '<code>images/washers.png</code>(백라이트 — 배경이 밝고 부품이 어둡다) 의 왼쪽 위 200×200 영역(<code>Rect(0, 0, 200, 200)</code>)에서 밝기가 <b>200 이상</b>인 픽셀(= 배경) 수를 반복문으로 세세요. 그다음 같은 영역을 ROI 로 잘라 <code>Cv2.Threshold(roi, bin, 199, 255, ThresholdTypes.Binary)</code> + <code>Cv2.CountNonZero</code> 로 센 값과 같은지 출력하세요. 전체 40,000 픽셀에서 배경을 뺀 나머지가 와셔 2개(W1 · W2)의 면적입니다.',
             hint: '<code>using var roi = img[new Rect(0, 0, 200, 200)];</code> 는 3교시 내용이지만 미리 써 봅니다. Threshold 는 "199 보다 크면 255" 이므로 200 이상과 같습니다.',
+            expect: '반복문: 30922\nThreshold: 30922, 같은가? True',
             starter: `using System;
 using OpenCvSharp;
 
@@ -995,7 +1000,7 @@ class Program
 {
     static void Main()
     {
-        using var img = Cv2.ImRead("images/sample_gray.png", ImreadModes.Grayscale);
+        using var img = Cv2.ImRead("images/washers.png", ImreadModes.Grayscale);
         var idx = img.GetGenericIndexer<byte>();
         int count = 0;
         // TODO: y 0~199, x 0~199 반복하며 idx[y, x] >= 200 이면 count++
@@ -1018,7 +1023,7 @@ class Program
 {
     static void Main()
     {
-        using var img = Cv2.ImRead("images/sample_gray.png", ImreadModes.Grayscale);
+        using var img = Cv2.ImRead("images/washers.png", ImreadModes.Grayscale);
         var idx = img.GetGenericIndexer<byte>();
         int count = 0;
         for (int y = 0; y < 200; y++)
@@ -1101,7 +1106,6 @@ class Program
         for (int y = 0; y < g.Rows; y++)
             for (int x = 0; x < g.Cols; x++)
                 gi[y, x] = (byte)x;                 // 밝기 = x
-
         using var c = new Mat(256, 256, MatType.CV_8UC3);
         var ci = c.GetGenericIndexer<Vec3b>();
         for (int y = 0; y < c.Rows; y++)
@@ -1109,9 +1113,7 @@ class Program
                 ci[y, x] = new Vec3b((byte)x, (byte)y, 128);   // B=x, G=y
 
         Console.WriteLine($"c(200,50)={c.At<Vec3b>(200, 50)}");
-        Cv2.ImShow("gray", g);
-        Cv2.ImShow("color", c);
-        Cv2.WaitKey(0);
+        Cv2.ImShow("gray", g);  Cv2.ImShow("color", c);
     }
 }`, points: ['이중 for: 바깥 y(행) · 안쪽 x(열) = 메모리 순서', '<code>(byte)x</code> 형 변환 필수 (int → byte)', '65,536 픽셀 × 2 — 이 정도는 반복문도 OK', '초깃값 없이 만들었지만 모든 픽셀을 채우므로 OK'], notes: '<p>결과의 색 방향을 읽게 합니다: 오른쪽으로 갈수록 B 증가(파랗게), 아래로 갈수록 G 증가. 💬 "R = x 로 바꾸면?" 학생들이 직접 바꿔 실행. 세로 그라데이션(gi[y, x] = (byte)y) 도 시도. (7분)</p>' },
           { layout: 'two', title: '왜 반복문 대신 Cv2 함수를 쓰나', left: { title: '픽셀 반복문 (At / 인덱서)', bullets: ['307,200 픽셀 × 호출마다 범위 검사', '.NET 에서 수 ms ~ 수십 ms, 인터프리터는 수 초', '포화 · 경계 · 반올림을 직접 처리해야 함', '용도: <b>원리 학습</b>, Cv2 에 없는 특수 규칙'] }, right: { title: 'Cv2 함수 (BitwiseNot · Add · InRange …)', bullets: ['네이티브 C++ · SIMD 로 한 번에 훑음', '수십~수백 배 빠름', '포화 연산 등을 알아서 처리', '한 줄 — 읽기 쉽다', '용도: <b>실제 처리는 항상 이쪽</b>'] }, notes: '<p>예제 4 를 실행해 시간을 보여 줍니다 (브라우저: 반복문 수 초 vs Cv2 수 ms). "두 결과가 다른 픽셀 수: 0" 으로 결과가 같음을 확인. 진짜 .NET 은 반복문도 훨씬 빠르지만 비율은 비슷하다고 설명. (6분)</p>' },
@@ -1124,8 +1126,7 @@ class Program
     {
         using var img = Cv2.ImRead("images/sample_color.png");
         var roi = new Rect(70, 60, 100, 100);         // 빨간 원 주변
-        var idx = img.GetGenericIndexer<Vec3b>();
-        int red = 0;
+        var idx = img.GetGenericIndexer<Vec3b>();  int red = 0;
         for (int y = roi.Top; y < roi.Bottom; y++)
             for (int x = roi.Left; x < roi.Right; x++)
             {
@@ -1133,11 +1134,9 @@ class Program
                 if (p.Item2 > 150 && p.Item1 < 100 && p.Item0 < 100) red++;
             }
         Console.WriteLine($"반복문 (ROI): {red}, 원 넓이 ≈ {Math.PI * 34 * 34:F0}");
-
         using var mask = new Mat();     // 같은 조건을 전체 이미지에 한 줄로
         Cv2.InRange(img, new Scalar(0, 0, 151), new Scalar(99, 99, 255), mask);
         Console.WriteLine($"InRange (전체): {Cv2.CountNonZero(mask)}");
-        Cv2.ImShow("red mask", mask);
     }
 }`, points: ['조건 판정은 Item2(R) · Item1(G) · Item0(B) 로', 'ROI 범위만 반복 → 10,000 번', '<code>Cv2.InRange(src, 하한, 상한, mask)</code>: 범위 안 = 255', '전체에서는 빨간 원 2개 → 약 2배'], notes: '<p>반복문 결과가 π·34² ≈ 3632 근처인지 확인합니다 (가장자리 블러 때문에 약간 다름). InRange 결과가 대략 2배인 이유 — 빨간 원이 2개. 색 기반 검출은 5차시(HSV)에서 제대로 배운다고 예고. (5분)</p>' },
           { layout: 'bullets', title: '흔한 실수 2가지', bullets: [
@@ -1197,13 +1196,16 @@ class Program
           { type: 'p', html: '검사 장비는 보통 화면 전체가 아니라 <b>관심 영역(ROI, Region Of Interest)</b>만 처리합니다. OpenCV 에서 ROI 는 <code>new Mat(img, rect)</code>, <code>img[rect]</code>, <code>img.SubMat(rect)</code> 로 만드는데, 셋 다 <b>새 이미지를 복사하는 것이 아니라 원본 메모리의 일부를 가리키는 창(view)</b>입니다. 그래서 만드는 데 시간이 거의 들지 않고, <b>ROI 를 수정하면 원본도 바뀝니다</b>.' },
           { type: 'figure', html: FIG_ROI, caption: '그림 4. ROI 는 원본 메모리를 가리키는 창 — 수정하면 원본도 바뀐다. Clone()/CopyTo() 만 새 메모리를 만든다' },
           { type: 'code', title: '예제 1: ROI 를 수정하면 원본이 바뀐다', code: EX3_ROI,
-            desc: '<code>roi1.SetTo(0)</code> 을 했는데 <code>img</code> 의 픽셀이 0 이 됩니다 — 같은 메모리이기 때문입니다. <code>IsSubmatrix</code> 가 True 면 ROI 입니다. ROI 안의 좌표는 <b>ROI 기준 (0, 0)</b> 부터 시작한다는 점도 기억하세요: img 의 (50, 50) 이 roi 의 (0, 0) 입니다.' },
+            desc: '<code>roi1.SetTo(0)</code> 을 했는데 <code>img</code> 의 픽셀이 0 이 됩니다 — 같은 메모리이기 때문입니다. <code>IsSubmatrix</code> 가 True 면 ROI 입니다. ROI 안의 좌표는 <b>ROI 기준 (0, 0)</b> 부터 시작한다는 점도 기억하세요: img 의 (50, 50) 이 roi 의 (0, 0) 입니다.',
+            expect: 'roi1: (width:200 height:150), IsSubmatrix=True\nimg : (width:640 height:480), IsSubmatrix=False\n수정 전 img(100,100) = 224\nroi1.SetTo(0) 후 img(100,100) = 0\nroi2(50,50) = 213  (roi2 도 같은 메모리)\nroi2.SetTo(255) 후 img(60,60) = 255' },
           { type: 'callout', kind: 'tip', title: 'ROI 는 버그가 아니라 기능', html: '"일부만 처리하고 그 결과가 원본에 바로 반영되기"를 원할 때 ROI 는 가장 빠르고 간단한 방법입니다: <code>Cv2.GaussianBlur(img[rect], img[rect], …)</code> 처럼 ROI 에 바로 결과를 쓰거나, <code>Cv2.Rectangle(img[rect], …)</code> 로 ROI 좌표계에서 그릴 수 있습니다. 반대로 원본을 <b>보존</b>해야 하면 반드시 <code>Clone()</code> 하세요.' },
           { type: 'h', text: 'Clone · CopyTo: 진짜 복사' },
           { type: 'code', title: '예제 2: Clone() 과 CopyTo() — 독립된 복사본', code: EX3_CLONE,
-            desc: '<code>Clone()</code> 은 새 메모리에 복사해 돌려주고, <code>CopyTo(dst)</code> 는 기존 Mat(dst) 에 복사합니다. <code>img[rect].Clone()</code> 은 "잘라내기"의 정석입니다. 반면 <code>Mat alias = img;</code> 는 <b>참조 복사</b> — C# 의 클래스 변수는 객체를 가리키는 이름이므로 alias 를 바꾸면 img 도 바뀝니다 (Mat 은 class 입니다).' },
+            desc: '<code>Clone()</code> 은 새 메모리에 복사해 돌려주고, <code>CopyTo(dst)</code> 는 기존 Mat(dst) 에 복사합니다. <code>img[rect].Clone()</code> 은 "잘라내기"의 정석입니다. 반면 <code>Mat alias = img;</code> 는 <b>참조 복사</b> — C# 의 클래스 변수는 객체를 가리키는 이름이므로 alias 를 바꾸면 img 도 바뀝니다 (Mat 은 class 입니다).',
+            expect: 'copy.SetTo(0) 후 img(100,100) = 224 (원본 그대로)\npart: (width:200 height:150), IsSubmatrix=False\ndst: (width:640 height:480) CV_8UC1\nalias.SetTo(128) 후 img(100,100) = 128 (같은 객체)' },
           { type: 'code', title: '예제 3: 로고 삽입 — CopyTo(roi) 와 마스크', code: EX3_LOGO,
-            desc: '<b>다른 이미지에 붙이기</b> = "붙일 자리의 ROI 에 CopyTo". 크기와 형식이 같아야 합니다. 두 번째 인수로 <b>마스크</b>(CV_8UC1, 255 인 곳만 복사)를 주면 원 모양처럼 일부만 붙일 수 있어 로고 · 아이콘 오버레이에 쓰입니다. <code>img[rect] = logo;</code> 인덱서 대입도 같은 뜻입니다.' },
+            desc: '<b>다른 이미지에 붙이기</b> = "붙일 자리의 ROI 에 CopyTo". 크기와 형식이 같아야 합니다. 두 번째 인수로 <b>마스크</b>(CV_8UC1, 255 인 곳만 복사)를 주면 원 모양처럼 일부만 붙일 수 있어 로고 · 아이콘 오버레이에 쓰입니다. <code>img[rect] = logo;</code> 인덱서 대입도 같은 뜻입니다.',
+            expect: '로고 중심 픽셀 (원): Vec3b(255, 80, 0)\n로고 모서리 픽셀 (배경): Vec3b(0, 220, 255)\n마스크 붙임 모서리 (원본 유지): Vec3b(53, 49, 48)' },
           { type: 'h', text: 'Mat 산술 · 비트 연산자' },
           { type: 'table', head: ['연산', '뜻', '같은 Cv2 함수', '주의'], rows: [
             ['<code>img + 50</code> / <code>img - 50</code>', '모든 픽셀에 더하기/빼기', '<code>Cv2.Add(img, new Scalar(50), dst)</code>', '<b>포화</b>: 0~255 를 벗어나면 잘림 (밝기 조절, 6차시)'],
@@ -1213,14 +1215,17 @@ class Program
             ['<code>a > 100</code> 등', '비교 → 0/255 마스크', '<code>Cv2.Compare</code>', '이진화의 간단한 형태 (7차시)']
           ], caption: '표 3. Mat 연산자 — 결과는 항상 새 Mat. Python numpy 의 배열 연산과 비슷하지만 오버플로 대신 포화' },
           { type: 'code', title: '예제 4: 산술 · 비트 연산자 써 보기', code: EX3_ARITH,
-            desc: '<code>img + 50</code> 은 모든 픽셀을 밝게, <code>img * 1.5</code> 는 대비를 키우고, <code>~img</code> 는 반전입니다. 8비트에서 결과는 <b>0~255 로 포화</b>됩니다 — 밝은 배경(약 190~240)에 50 을 더하면 많은 픽셀이 255 로 잘립니다. 두 이미지 뺄셈은 음수가 0 이 되므로 "차이"가 필요하면 <code>Cv2.Absdiff</code>. <code>&amp;</code> 와 <code>|</code> 는 마스크로 영역을 남기거나 지울 때 씁니다.' },
+            desc: '<code>img + 50</code> 은 모든 픽셀을 밝게, <code>img * 1.5</code> 는 대비를 키우고, <code>~img</code> 는 반전입니다. 8비트에서 결과는 <b>0~255 로 포화</b>됩니다 — 밝은 배경(약 190~240)에 50 을 더하면 많은 픽셀이 255 로 잘립니다. 두 이미지 뺄셈은 음수가 0 이 되므로 "차이"가 필요하면 <code>Cv2.Absdiff</code>. <code>&amp;</code> 와 <code>|</code> 는 마스크로 영역을 남기거나 지울 때 씁니다.',
+            expect: '원본 (240,320) = 22\nimg + 50   = 72\nimg - 50   = 0\nimg * 1.5  = 33 (255 를 넘으면 255)\n~img       = 233\nimg - other = 0, absdiff = 11\nimg & mask: 안=22, 밖=0' },
           { type: 'h', text: 'ConvertTo: 깊이(자료형) 바꾸기 · SetTo: 마스크로 채우기' },
           { type: 'code', title: '예제 5: ConvertTo(CV_32F · 스케일) 와 SetTo(값, 마스크)', code: EX3_CONVERT,
-            desc: '<code>src.ConvertTo(dst, 형식, alpha, beta)</code> 는 <b>dst = src × alpha + beta</b> 를 계산하며 형식을 바꿉니다. 8비트 → 32F 로 바꿔 0~1 범위로 만들면 오버플로 걱정 없이 계산할 수 있고, 표시할 때는 다시 8비트로 돌립니다 (ImShow 는 32F 를 0~1 로 가정해 보여 줍니다). <code>SetTo(값, 마스크)</code> 는 마스크가 255 인 픽셀만 값으로 채웁니다 — 검출 결과를 색으로 칠할 때 자주 씁니다.' },
+            desc: '<code>src.ConvertTo(dst, 형식, alpha, beta)</code> 는 <b>dst = src × alpha + beta</b> 를 계산하며 형식을 바꿉니다. 8비트 → 32F 로 바꿔 0~1 범위로 만들면 오버플로 걱정 없이 계산할 수 있고, 표시할 때는 다시 8비트로 돌립니다 (ImShow 는 32F 를 0~1 로 가정해 보여 줍니다). <code>SetTo(값, 마스크)</code> 는 마스크가 255 인 픽셀만 값으로 채웁니다 — 검출 결과를 색으로 칠할 때 자주 씁니다.',
+            expect: 'f: CV_32FC1, (240,320) = 0.086\nf * 2 = 0.173 (byte 였다면 255 에서 잘림)\nback: CV_8UC1, (240,320) = 22\n마스크 픽셀 수: 46478\n와셔 몸통 (y=60, x=90) = Vec3b(0, 0, 255)\n배경 (y=10, x=10)      = Vec3b(111, 96, 82)' },
           { type: 'callout', kind: 'wpf', title: 'WPF 에서는', html: '<code>BitmapSourceConverter.ToBitmapSource</code> 에 <b>CV_32F Mat 을 그대로 넘기면</b> 화면이 검거나 이상하게 나옵니다. 실수 계산 결과는 <code>ConvertTo(dst, MatType.CV_8UC1, 255)</code> 또는 <code>Cv2.Normalize(src, dst, 0, 255, NormTypes.MinMax, MatType.CV_8UC1)</code> 으로 8비트로 바꾼 뒤 표시하세요. 또 ROI Mat(IsSubmatrix=True)은 메모리가 연속이 아니라(IsContinuous=False) 변환기가 거부하는 경우가 있으니 <code>roi.Clone()</code> 을 넘기는 것이 안전합니다.' },
           { type: 'h', text: '오류 메시지 읽는 법' },
           { type: 'code', title: '예제 6: 채널 · 크기 · 형식 오류 메시지 모아 보기', code: EX3_ERRORS,
-            desc: 'OpenCV 오류는 <code>OpenCVException</code> 으로, 이 실습 환경의 자료형 오류는 <code>ArgumentException</code> 으로 잡힙니다. 메시지의 <code>scn == 3</code> 은 "source channel number 가 3 이어야" (입력이 3채널이어야), <code>size</code>/<code>type</code> 이 들어 있으면 두 Mat 의 크기 · 형식 불일치입니다. 오류가 나면 <b>관련 Mat 들의 <code>Size()</code> 와 <code>Type()</code> 을 출력</b>해 보는 것이 가장 빠른 디버깅입니다.' },
+            desc: 'OpenCV 오류는 <code>OpenCVException</code> 으로, 이 실습 환경의 자료형 오류는 <code>ArgumentException</code> 으로 잡힙니다. 메시지의 <code>scn == 3</code> 은 "source channel number 가 3 이어야" (입력이 3채널이어야), <code>size</code>/<code>type</code> 이 들어 있으면 두 Mat 의 크기 · 형식 불일치입니다. 오류가 나면 <b>관련 Mat 들의 <code>Size()</code> 와 <code>Type()</code> 을 출력</b>해 보는 것이 가장 빠른 디버깅입니다.',
+            expect: '오류 1 OpenCVException: color.simd_helpers.hpp:92: error: (-15:Bad number of channels) in func…\n오류 2 OpenCVException: arithm.cpp:665: error: (-209:Sizes of input arguments do not match) Th…\n오류 3 OpenCVException: arithm.cpp:665: error: (-209:Sizes of input arguments do not match) Th…\n오류 4 OpenCVException: ROI 가 이미지 범위를 벗어났습니다: (x:600 y:400 width:100 height:100) / 이미지 640×480\n오류 5 ArgumentException: Vec3b 는 3채널용인데 이 Mat 은 1채널(CV_8UC1)입니다' },
           { type: 'table', head: ['메시지 조각', '뜻', '해결'], rows: [
             ['<code>scn == 3 || scn == 4</code>', '입력 채널이 3(4)이어야 함 — 그레이를 넘겼다', '<code>Channels()</code> 확인, 컬러로 읽거나 GRAY2BGR'],
             ['<code>depth == CV_8U</code> · <code>CV_8UC1</code>', '8비트 1채널이 필요 (Threshold · FindContours 등)', 'CvtColor(BGR2GRAY) · ConvertTo(CV_8U)'],
@@ -1235,6 +1240,7 @@ class Program
             title: '4분할 영역별 평균 밝기', level: 1,
             desc: '<code>images/washers.png</code>(그레이) 를 <b>4분할</b>(왼쪽 위 · 오른쪽 위 · 왼쪽 아래 · 오른쪽 아래, 각 320×240) ROI 로 나누고, 각 영역의 <b>평균 밝기</b>(<code>Cv2.Mean(roi).Val0</code>, 소수 첫째 자리)를 출력하세요. 가장 어두운 영역(부품이 많은 곳)의 ROI 를 <code>SetTo(0)</code> 으로 검게 만들어 원본 이미지를 표시하세요.',
             hint: 'Rect 4개를 배열에 넣고 foreach. 가장 어두운 것은 최소 평균을 기억하는 변수로. <code>img[rect].SetTo(new Scalar(0))</code> 이 원본을 바꿉니다.',
+            expect: '왼쪽 위: 평균 밝기 189.9\n오른쪽 위: 평균 밝기 177.9\n왼쪽 아래: 평균 밝기 204.7\n오른쪽 아래: 평균 밝기 194.8\n가장 어두운 영역: 오른쪽 위',
             starter: `using System;
 using OpenCvSharp;
 
@@ -1291,6 +1297,7 @@ class Program
             title: '두 이미지 합성: 반반 붙이기 + 마스크로 겹치기', level: 2,
             desc: '<code>images/washers.png</code> 와 <code>images/coins_parts.png</code>(둘 다 640×480 그레이)로 ① 왼쪽 절반은 washers, 오른쪽 절반은 coins 인 이미지를 <b>CopyTo(ROI)</b> 로 만들고, ② coins 의 밝은 부품(<code>Cv2.Threshold(coins, mask, 105, 255, ThresholdTypes.Binary)</code>)만 washers 위에 <b>CopyTo(dst, mask)</b> 로 겹친 이미지를 만드세요. 마스크의 흰 픽셀 수와 합성 결과의 (240, 320) 픽셀 값을 출력하세요.',
             hint: '① <code>coins[right].CopyTo(half[right]);</code> — ROI → ROI 복사. ② <code>using var over = washers.Clone(); coins.CopyTo(over, mask);</code>',
+            expect: '마스크 흰 픽셀: 26230\nover(240,320) = 22',
             starter: `using System;
 using OpenCvSharp;
 
@@ -1414,11 +1421,9 @@ class Program
     static void Main()
     {
         using var img = Cv2.ImRead("images/washers.png", ImreadModes.Grayscale);
-
         using var f = new Mat();                       // 8U → 32F, 0~1 로 스케일
         img.ConvertTo(f, MatType.CV_32FC1, 1.0 / 255.0);
         Console.WriteLine($"{f.Type()} (240,320)={f.At<float>(240, 320):F3}");
-
         using var back = new Mat();                    // 32F → 8U 로 되돌리기 (표시용)
         f.ConvertTo(back, MatType.CV_8UC1, 255.0);
         Console.WriteLine($"{back.Type()} (240,320)={back.At<byte>(240, 320)}");

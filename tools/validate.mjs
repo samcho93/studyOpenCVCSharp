@@ -40,6 +40,10 @@ for (const id of targets) {
   if (!order) err(`course.js 의 order 에 ${id} 가 없습니다`);
   else if (ch.sections.length !== order.hours) err(`교시 수 ${ch.sections.length} ≠ course.js hours ${order.hours}`);
   if (!ch.summary) warn('summary 없음');
+  // WPF 프로젝트 링크는 실제로 있는 wpf/ 폴더만 가리켜야 한다 (없으면 GitHub 404)
+  const wpfExists = (p) => fs.existsSync(path.join(ROOT, 'wpf', p));
+  if (ch.wpf && !wpfExists(ch.wpf)) err(`차시 wpf: '${ch.wpf}' 프로젝트가 wpf/ 에 없습니다 (있는 것: ${fs.readdirSync(path.join(ROOT, 'wpf')).filter((d) => fs.statSync(path.join(ROOT, 'wpf', d)).isDirectory()).join(', ')})`);
+  ch.sections.forEach((sec) => (sec.content || []).forEach((b) => { if (b.type === 'wpf' && b.project && !wpfExists(b.project)) err(`${sec.id}: wpf 블록 project '${b.project}' 가 wpf/ 에 없습니다`); }));
   if (!ch.goals || !ch.goals.length) warn('goals 없음');
 
   const codes = [];   // {label, code, expect, stdin, run, local, lang, nondeterministic}
