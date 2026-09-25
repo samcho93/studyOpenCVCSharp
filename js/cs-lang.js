@@ -663,7 +663,13 @@
           const body = this.parseMethodBody();
           return this.loc({ kind: 'LocalFunc', name, retType: type, params, body: body.body, exprBody: body.exprBody }, start);
         }
-        if (type && type.name === 'Tuple' && this.isOp('=') && type.tupleNames.some((n) => n)) { this.error('튜플 분해 선언에서는 var (a, b) = … 형태를 쓰세요'); }
+        if (type && type.name === 'Tuple' && this.isOp('=') && type.tupleNames.every((n) => n)) {
+          // 형식을 명시한 분해 선언: (Rect rect, double area) = found[i];
+          this.next();
+          const init = this.parseExpression();
+          this.expectOp(';');
+          return this.loc({ kind: 'Deconstruct', names: type.tupleNames.slice(), types: type.args.map((a) => a.str), init }, start);
+        }
         this.reset(m);
         return null;
       }

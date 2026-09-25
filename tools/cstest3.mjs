@@ -18,6 +18,9 @@ t('roi-color-vec3b', U + `using var img = new Mat(4, 6, MatType.CV_8UC3, new Sca
 // 픽셀 캐시가 출력 Mat 재할당 뒤에도 새 데이터를 읽는지 (크기가 바뀌는 CopyTo · Create · Resize)
 t('pix-cache-invalidate', U + `var m = new Mat(2, 2, MatType.CV_8UC1, new Scalar(5)); Console.WriteLine(m.At<byte>(1, 1)); var big = new Mat(4, 4, MatType.CV_8UC1, new Scalar(9)); big.CopyTo(m); Console.WriteLine(m.At<byte>(3, 3) + " " + m.Rows); m.Create(3, 3, MatType.CV_8UC1); m.SetTo(new Scalar(7)); Console.WriteLine(m.At<byte>(2, 2)); var r = new Mat(); Cv2.Resize(big, r, new Size(8, 8)); Console.WriteLine(r.At<byte>(7, 7)); Cv2.Resize(big, r, new Size(2, 2)); Console.WriteLine(r.At<byte>(1, 1) + " " + r.Cols); try { r.At<byte>(3, 3); } catch (IndexOutOfRangeException) { Console.WriteLine("범위 검사 OK"); }`, '5\n9 4\n7\n9\n9 2\n범위 검사 OK\n');
 
+// 형식을 명시한 튜플 분해 선언 (실제 WPF 프로젝트 코드에 있는 문법)
+t('typed-deconstruct', U + `var found = new List<(Rect Rect, double Area, Point Center)> { (new Rect(1, 2, 3, 4), 12.5, new Point(2, 4)) }; for (int i = 0; i < found.Count; i++) { (Rect rect, double area, Point center) = found[i]; Console.WriteLine($"{rect.Width} {area / 2} {center.X}"); } (int a, double b) = (7, 3); Console.WriteLine(a / 2 + " " + b / 2);`, '3 6.25 2\n3 1.5\n');
+
 let pass = 0, fail = 0;
 for (const tc of tests) {
   const r = await runCs(tc.code);

@@ -702,7 +702,8 @@
         case 'Deconstruct': {
           const v = this.evalExpr(s.init, scope);
           const items = this.deconstruct(v, s.names.length, s);
-          s.names.forEach((n, i) => { if (n !== '_') scope.declare(n, items[i], runtimeType(items[i])); });
+          // 형식을 명시한 분해 선언 (Rect rect, double area) = … 은 그 형식으로, var (a, b) = … 는 값의 형식으로
+          s.names.forEach((n, i) => { if (n === '_') return; const t = s.types && s.types[i] ? normType(s.types[i]) : null; scope.declare(n, coerce(items[i], t, this), t || runtimeType(items[i])); });
           return;
         }
         case 'LocalFunc': return;
