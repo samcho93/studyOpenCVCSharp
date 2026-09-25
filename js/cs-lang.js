@@ -1288,11 +1288,10 @@
         this.next();
         const sizes = [];
         let rank = 1;
-        if (!this.isOp(']')) {
+        if (this.isOp(',')) { while (this.acceptOp(',')) rank++; }          // new int[,] { … }
+        else if (!this.isOp(']')) {
           sizes.push(this.parseExpression());
           while (this.acceptOp(',')) { sizes.push(this.parseExpression()); rank++; }
-        } else {
-          while (this.acceptOp(',')) rank++;
         }
         this.expectOp(']');
         // 추가 차원 (재그 배열) new int[3][]
@@ -1353,7 +1352,7 @@
     if (!t) return '?';
     if (t.str && !t.__dirty) { /* 재계산 */ }
     let s = t.name;
-    if (t.name === 'Tuple') s = '(' + t.args.map(typeToString).join(', ') + ')';
+    if (t.name === 'Tuple') s = '(' + t.args.map((a, i) => typeToString(a) + (t.tupleNames && t.tupleNames[i] ? ' ' + t.tupleNames[i] : '')).join(', ') + ')';
     else if (t.args && t.args.length) s += '<' + t.args.map(typeToString).join(',') + '>';
     if (t.nullable) s += '?';
     for (const d of t.rank || []) s += '[' + ','.repeat(d - 1) + ']';

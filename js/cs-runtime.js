@@ -73,7 +73,9 @@
   const baseName = (str) => { if (!str) return ''; const i = str.indexOf('<'); const j = str.indexOf('['); let e = str.length; if (i >= 0) e = Math.min(e, i); if (j >= 0) e = Math.min(e, j); return str.slice(0, e).replace(/\?$/, ''); };
   const isArrayT = (str) => !!str && /\]$/.test(str);
   const elemT = (str) => { if (!str) return null; const m = /^(.*)\[[,]*\]$/.exec(str); return m ? m[1] : null; };
-  const genericArgs = (str) => { if (!str) return []; const i = str.indexOf('<'); if (i < 0) return []; let depth = 0, cur = '', out = []; for (let k = i + 1; k < str.length; k++) { const c = str[k]; if (c === '<') depth++; if (c === '>') { if (depth === 0) break; depth--; } if (c === ',' && depth === 0) { out.push(cur.trim()); cur = ''; continue; } cur += c; } if (cur.trim()) out.push(cur.trim()); return out; };
+  const genericArgs = (str) => { if (!str) return []; const i = str.indexOf('<'); if (i < 0) return []; let depth = 0, cur = '', out = []; for (let k = i + 1; k < str.length; k++) { const c = str[k]; if (c === '<' || c === '(') depth++; if (c === ')') depth--; if (c === '>') { if (depth === 0) break; depth--; } if (c === ',' && depth === 0) { out.push(cur.trim()); cur = ''; continue; } cur += c; } if (cur.trim()) out.push(cur.trim()); return out; };
+  /** "(string name, int n)" → ['name', 'n'] (이름 없으면 null) */
+  const tupleNamesOf = (t) => { if (!t || t[0] !== '(') return null; let depth = 0, cur = '', parts = []; for (let k = 1; k < t.length - 1; k++) { const c = t[k]; if (c === '<' || c === '(') depth++; if (c === '>' || c === ')') depth--; if (c === ',' && depth === 0) { parts.push(cur); cur = ''; continue; } cur += c; } parts.push(cur); return parts.map((p) => { const w = p.trim().split(/\s+/); return w.length >= 2 ? w[w.length - 1] : null; }); };
 
   const TYPE_ALIAS = { Int32: 'int', Int64: 'long', Int16: 'short', UInt32: 'uint', UInt64: 'ulong', UInt16: 'ushort', Byte: 'byte', SByte: 'sbyte', Double: 'double', Single: 'float', Boolean: 'bool', String: 'string', Char: 'char', Object: 'object', Decimal: 'decimal', Void: 'void' };
   const normType = (s) => { if (!s) return s; return s.replace(/\b(?:System|OpenCvSharp|Microsoft)(?:\.[A-Za-z_]\w*)*\.(?=[A-Z])/g, '').replace(/\b(Int32|Int64|Int16|UInt32|UInt64|UInt16|Byte|SByte|Double|Single|Boolean|String|Char|Object|Decimal|Void)\b/g, (m, n) => TYPE_ALIAS[n]); };
@@ -83,6 +85,7 @@
     if (!t || t === 'var' || t === 'object' || t === 'dynamic' || t === '?') return v;
     t = normType(t);
     if (v == null) return v;
+    if (t[0] === '(' && v instanceof CsTuple) { const names = tupleNamesOf(t); if (names && names.some(Boolean)) return new CsTuple(v.items.slice(), names.map((n, k) => n || v.names[k])); return v; }
     if (t.endsWith('?')) t = t.slice(0, -1);
     switch (t) {
       case 'int': { const n = toNum(v, t, interp); return wrapInt(n); }
