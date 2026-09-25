@@ -412,7 +412,8 @@ class Program
           const lang = codes.cs != null ? 'cs' : codes.other ? codes.other.lang : 'cs';
           const id = reg(code, b.title, b.stdin, { lang, block: b });
           if (!firstCode && canRun(b, codes)) firstCode = { code, title: b.title };
-          return codeBlockHtml(b, id, { tag: b.title && /^예제/.test(b.title) ? '예제' : b.title && /추가|더 알아보기/.test(b.title) ? '추가' : '' });
+          // 제목이 이미 "예제 …" / "추가: …" 로 시작하면 같은 말을 칩으로 또 붙이지 않는다
+          return codeBlockHtml(b, id, { tag: b.title && !/^(예제|추가)/.test(b.title) && /더 알아보기/.test(b.title) ? '추가' : '' });
         }
         case 'callout': {
           const icon = { tip: '💡', warn: '⚠️', info: 'ℹ️', more: '📘', field: '🏭', wpf: '🪟', vs: '🧰' }[b.kind] || 'ℹ️';
