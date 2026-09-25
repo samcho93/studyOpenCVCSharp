@@ -94,7 +94,7 @@
     def('Repeat', (a) => guard(() => cv.repeat(asMat(a[0]), num(a[1]), num(a[2]), outMat(a[3]))), 'void');
     def('HConcat', (a) => { const d = outMat(a[a.length - 1]); const v = new cv.MatVector(); (a.length === 2 ? seqOf(a[0]) : a.slice(0, -1)).forEach((m) => v.push_back(asMat(m))); try { guard(() => cv.hconcat(v, d)); } finally { v.delete(); } }, 'void');
     def('VConcat', (a) => { const d = outMat(a[a.length - 1]); const v = new cv.MatVector(); (a.length === 2 ? seqOf(a[0]) : a.slice(0, -1)).forEach((m) => v.push_back(asMat(m))); try { guard(() => cv.vconcat(v, d)); } finally { v.delete(); } }, 'void');
-    def('SetIdentity', (a) => { const m = asMat(a[0]); m.setTo(new cv.Scalar(0)); const n = Math.min(m.rows, m.cols), d = DEPTH_ARR(m), ch = m.channels(); for (let k = 0; k < n; k++) d[(k * m.cols + k) * ch] = a.length > 1 ? toScalar(a[1]).Val0 : 1; }, 'void');
+    def('SetIdentity', (a) => { const m = asMat(a[0]); m.setTo(new cv.Scalar(0)); const n = Math.min(m.rows, m.cols); for (let k = 0; k < n; k++) { const p = ctx.pixelAt(m, k, k); p.a[p.base] = a.length > 1 ? toScalar(a[1]).Val0 : 1; } }, 'void');
     def('Randu', (a) => guard(() => cv.randu(asMat(a[0]), toCvScalar(a[1]), toCvScalar(a[2]))), 'void');
     def('Randn', (a) => guard(() => cv.randn(asMat(a[0]), toCvScalar(a[1]), toCvScalar(a[2]))), 'void');
     def('RandShuffle', (a) => { const m = asMat(a[0]); const d = DEPTH_ARR(m), ch = m.channels(), n = m.rows * m.cols; for (let k = n - 1; k > 0; k--) { const j = Math.floor(Math.random() * (k + 1)); for (let c = 0; c < ch; c++) { const t = d[k * ch + c]; d[k * ch + c] = d[j * ch + c]; d[j * ch + c] = t; } } }, 'void');

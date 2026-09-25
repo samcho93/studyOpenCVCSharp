@@ -74,8 +74,17 @@
   const isArrayT = (str) => !!str && /\]$/.test(str);
   const elemT = (str) => { if (!str) return null; const m = /^(.*)\[[,]*\]$/.exec(str); return m ? m[1] : null; };
   const genericArgs = (str) => { if (!str) return []; const i = str.indexOf('<'); if (i < 0) return []; let depth = 0, cur = '', out = []; for (let k = i + 1; k < str.length; k++) { const c = str[k]; if (c === '<' || c === '(') depth++; if (c === ')') depth--; if (c === '>') { if (depth === 0) break; depth--; } if (c === ',' && depth === 0) { out.push(cur.trim()); cur = ''; continue; } cur += c; } if (cur.trim()) out.push(cur.trim()); return out; };
+  /** "(string name, int n)" → [{type:'string', name:'name'}, {type:'int', name:'n'}] */
+  const tupleParts = (t) => {
+    if (!t || t[0] !== '(') return [];
+    const end = t.lastIndexOf(')');
+    let depth = 0, cur = '', parts = [];
+    for (let k = 1; k < end; k++) { const c = t[k]; if (c === '<' || c === '(') depth++; if (c === '>' || c === ')') depth--; if (c === ',' && depth === 0) { parts.push(cur); cur = ''; continue; } cur += c; }
+    parts.push(cur);
+    return parts.map((p) => { const s = p.trim(); const i = s.lastIndexOf(' '); if (i > 0 && /^[A-Za-z_]\w*$/.test(s.slice(i + 1)) && !/[<,(]$/.test(s.slice(0, i))) return { type: normType(s.slice(0, i).trim()), name: s.slice(i + 1) }; return { type: normType(s), name: null }; });
+  };
   /** "(string name, int n)" → ['name', 'n'] (이름 없으면 null) */
-  const tupleNamesOf = (t) => { if (!t || t[0] !== '(') return null; let depth = 0, cur = '', parts = []; for (let k = 1; k < t.length - 1; k++) { const c = t[k]; if (c === '<' || c === '(') depth++; if (c === '>' || c === ')') depth--; if (c === ',' && depth === 0) { parts.push(cur); cur = ''; continue; } cur += c; } parts.push(cur); return parts.map((p) => { const w = p.trim().split(/\s+/); return w.length >= 2 ? w[w.length - 1] : null; }); };
+  const tupleNamesOf = (t) => { if (!t || t[0] !== '(') return null; return tupleParts(t).map((p) => p.name); };
 
   const TYPE_ALIAS = { Int32: 'int', Int64: 'long', Int16: 'short', UInt32: 'uint', UInt64: 'ulong', UInt16: 'ushort', Byte: 'byte', SByte: 'sbyte', Double: 'double', Single: 'float', Boolean: 'bool', String: 'string', Char: 'char', Object: 'object', Decimal: 'decimal', Void: 'void' };
   const normType = (s) => { if (!s) return s; return s.replace(/\b(?:System|OpenCvSharp|Microsoft)(?:\.[A-Za-z_]\w*)*\.(?=[A-Z])/g, '').replace(/\b(Int32|Int64|Int16|UInt32|UInt64|UInt16|Byte|SByte|Double|Single|Boolean|String|Char|Object|Decimal|Void)\b/g, (m, n) => TYPE_ALIAS[n]); };
@@ -1077,6 +1086,12 @@
         return new Ref(() => ({ __ns: full }), () => {});
       }
       if (obj && obj.__typeRef) return this.staticMemberRef(obj.__typeRef, name, node);
+      // 익명 형식 new { Name = …, Area = … } 의 멤버 (읽기 전용)
+      if (obj && obj.__anon) {
+        if (Object.prototype.hasOwnProperty.call(obj, name) && name !== '__anon' && name !== 'csToString') return new Ref(() => obj[name], () => { throw new CsException('CompileError', `익명 형식의 속성 '${name}' 은 읽기 전용입니다`); });
+        if (name === 'ToString') return new Ref(() => () => obj.csToString(), () => {});
+        throw new CsException('CompileError', `익명 형식에 '${name}' 멤버가 없습니다 (있는 것: ${Object.keys(obj).filter((k) => k !== '__anon' && k !== 'csToString').join(', ')})`);
+      }
       if (obj && obj.__cls) {
         for (let d = obj.__cls; d; d = d.baseDesc) {
           if (d.fields.some((f) => f.name === name)) return new Ref(() => obj[name], (v) => { obj[name] = coerce(v, this.fieldType(d, name), this); });
@@ -1291,7 +1306,23 @@
     // ---------------------------------------------------------------- new
     evalNew(e, scope) {
       if (!e.type) {
-        if (e.anonymous) { const o = { __anon: true }; for (const it of e.init) if (it.kind === 'member') o[it.name] = this.evalExpr(it.value, scope); o.csToString = () => '{ ' + Object.keys(o).filter((k) => k !== '__anon' && k !== 'csToString').map((k) => `${k} = ${fmt(o[k])}`).join(', ') + ' }'; return o; }
+        if (e.anonymous) {
+          // 익명 형식: new { Name = x, Area = a } 또는 투영 new { c.Area, name } (멤버 이름을 그대로 씀)
+          const o = { __anon: true };
+          const types = {};
+          for (const it of e.init) {
+            let key = null, expr = null;
+            if (it.kind === 'member') { key = it.name; expr = it.value; }
+            else if (it.kind === 'add' && (it.value.kind === 'Name' || it.value.kind === 'Member')) { key = it.value.name; expr = it.value; }
+            else throw new CsException('CompileError', '익명 형식에는 이름 = 값 형태로 속성을 쓰세요 (예: new { Area = a })');
+            o[key] = this.evalExpr(expr, scope);
+            types[key] = this.typeOf(expr, scope) || runtimeType(o[key]);
+          }
+          Object.defineProperty(o, '__types', { value: types, enumerable: false });
+          const keys = Object.keys(o).filter((k) => k !== '__anon');
+          o.csToString = () => '{ ' + keys.map((k) => `${k} = ${fmt(o[k], types[k])}`).join(', ') + ' }';
+          return o;
+        }
         throw new CsException('CompileError', "new() 는 변수의 형식을 알 수 있을 때만 쓸 수 있습니다 (예: List<int> a = new();)");
       }
       const tstr = normType(e.type.str);
@@ -1645,6 +1676,19 @@
             if (desc) { const st = desc.statics[e.name]; if (st) return st.t || (st.ret && typeof st.ret === 'string' ? st.ret : null) || null; if (desc.kind === 'enum') return desc.name; }
           }
           const ot = this.typeOf(e.obj, scope);
+          if ((!ot || ot === 'object') && e.obj.kind === 'Name') {
+            // 익명 형식 변수(var x = new { … }, 람다 매개 변수 c => c.Area): 생성할 때 기록한 필드 형식
+            const slot = scope.lookup(e.obj.name);
+            const v = slot && (slot.ref ? slot.ref.get() : slot.v);
+            if (v && v.__anon && v.__types) return v.__types[e.name] || null;
+          }
+          if (ot && ot[0] === '(') {
+            // 이름 있는 튜플 형식 "(int k, double a)" → 필드 형식 (ItemN 도)
+            const parts = tupleParts(ot);
+            const m = /^Item(\d+)$/.exec(e.name);
+            const hit = m ? parts[+m[1] - 1] : parts.find((p) => p.name === e.name);
+            return hit ? hit.type : null;
+          }
           if (ot) {
             const desc = this.types.get(baseName(ot));
             if (desc) {

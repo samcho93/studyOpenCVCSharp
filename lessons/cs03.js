@@ -1197,7 +1197,7 @@ class Program
           { type: 'figure', html: FIG_ROI, caption: '그림 4. ROI 는 원본 메모리를 가리키는 창 — 수정하면 원본도 바뀐다. Clone()/CopyTo() 만 새 메모리를 만든다' },
           { type: 'code', title: '예제 1: ROI 를 수정하면 원본이 바뀐다', code: EX3_ROI,
             desc: '<code>roi1.SetTo(0)</code> 을 했는데 <code>img</code> 의 픽셀이 0 이 됩니다 — 같은 메모리이기 때문입니다. <code>IsSubmatrix</code> 가 True 면 ROI 입니다. ROI 안의 좌표는 <b>ROI 기준 (0, 0)</b> 부터 시작한다는 점도 기억하세요: img 의 (50, 50) 이 roi 의 (0, 0) 입니다.',
-            expect: 'roi1: (width:200 height:150), IsSubmatrix=True\nimg : (width:640 height:480), IsSubmatrix=False\n수정 전 img(100,100) = 224\nroi1.SetTo(0) 후 img(100,100) = 0\nroi2(50,50) = 213  (roi2 도 같은 메모리)\nroi2.SetTo(255) 후 img(60,60) = 255' },
+            expect: 'roi1: (width:200 height:150), IsSubmatrix=True\nimg : (width:640 height:480), IsSubmatrix=False\n수정 전 img(100,100) = 224\nroi1.SetTo(0) 후 img(100,100) = 0\nroi2(50,50) = 0  (roi2 도 같은 메모리)\nroi2.SetTo(255) 후 img(60,60) = 255' },
           { type: 'callout', kind: 'tip', title: 'ROI 는 버그가 아니라 기능', html: '"일부만 처리하고 그 결과가 원본에 바로 반영되기"를 원할 때 ROI 는 가장 빠르고 간단한 방법입니다: <code>Cv2.GaussianBlur(img[rect], img[rect], …)</code> 처럼 ROI 에 바로 결과를 쓰거나, <code>Cv2.Rectangle(img[rect], …)</code> 로 ROI 좌표계에서 그릴 수 있습니다. 반대로 원본을 <b>보존</b>해야 하면 반드시 <code>Clone()</code> 하세요.' },
           { type: 'h', text: 'Clone · CopyTo: 진짜 복사' },
           { type: 'code', title: '예제 2: Clone() 과 CopyTo() — 독립된 복사본', code: EX3_CLONE,

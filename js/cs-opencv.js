@@ -177,7 +177,7 @@
     const contoursToVector = (list) => { const vec = new cv.MatVector(); const tmps = []; for (const c of seqOf(list) || []) { const { m, tmp } = contourMat(c); vec.push_back(m); if (tmp) tmps.push(m); } return { vec, free() { vec.delete(); tmps.forEach((t) => t.delete()); } }; };
     const matTypeOf = (v) => (v instanceof MatType ? v.Value : v instanceof CsEnumVal ? v.value : typeof v === 'number' ? v : -1);
     const newMat = () => ctx.wrap(new cv.Mat());
-    const outMat = (v, what) => { if (v instanceof Mat) return v.cv; if (v == null) throw new CsException('ArgumentNullException', `${what || '출력 Mat'} 이(가) null 입니다. new Mat() 으로 만들어 넘기세요`); throw new CsException('ArgumentException', `${what || '출력'}에는 Mat 이 필요합니다`); };
+    const outMat = (v, what) => { if (v instanceof Mat) { v._pix = null; return v.cv; } if (v == null) throw new CsException('ArgumentNullException', `${what || '출력 Mat'} 이(가) null 입니다. new Mat() 으로 만들어 넘기세요`); throw new CsException('ArgumentException', `${what || '출력'}에는 Mat 이 필요합니다`); };
     Object.assign(ctx, { isMat, asMat, toScalar, toCvScalar, toPoint, toSize, toRect, fromRect, isEnum, enumVal, seqOf, isPointSeq, pointsToMat, matToPoints, contourMat, withContour, contoursToVector, matTypeOf, newMat, outMat });
 
     // ---------------------------------------------------------------- 열거형
@@ -332,22 +332,64 @@
     const depthOfT = (t) => ({ byte: 0, sbyte: 1, ushort: 2, short: 3, int: 4, float: 5, double: 6 }[t]);
     ctx.DEPTH_ARR = DEPTH_ARR;
     const checkYX = (m, y, x) => { if (!Number.isInteger(y) || !Number.isInteger(x) || y < 0 || y >= m.rows || x < 0 || x >= m.cols) throw new CsException('IndexOutOfRangeException', `Mat 범위를 벗어난 좌표입니다: (행 y=${y}, 열 x=${x}) / 크기 ${m.rows}×${m.cols}. At<T>(y, x) 는 (행, 열) 순서입니다.`); };
+    /**
+     * 픽셀 (y, x) 의 채널 값 위치 → { a: 형식 배열, base: 시작 인덱스 }
+     * 연속 Mat 은 전체 배열 + 계산한 위치, ROI(비연속) Mat 은 행 간격(step)을 반영한 포인터 뷰를 쓴다.
+     */
+    const PTR_FN = ['ucharPtr', 'charPtr', 'ushortPtr', 'shortPtr', 'intPtr', 'floatPtr', 'doublePtr'];
+    function pixelAt(m, y, x) {
+      const ch = m.channels();
+      if (m.isContinuous()) return { a: DEPTH_ARR(m), base: (y * m.cols + x) * ch, ch };
+      const fn = PTR_FN[m.depth()];
+      if (fn && typeof m[fn] === 'function') return { a: m[fn](y, x), base: 0, ch };
+      // 포인터 함수가 없으면 행 간격으로 직접 계산 (요소 단위, 필요한 길이의 뷰)
+      const rowStep = (Array.isArray(m.step) ? m.step[0] : m.step) / m.elemSize1();
+      const a0 = DEPTH_ARR(m), need = y * rowStep + (x + 1) * ch;
+      const a = a0.length < need ? new a0.constructor(a0.buffer, a0.byteOffset, need) : a0;
+      return { a, base: y * rowStep + x * ch, ch };
+    }
+    /** 비연속(ROI) Mat 이면 연속 복사본을 만들어 f 에 넘긴다 (합계 · 배열 변환 · Dump 등 전체 순회용) */
+    function withContinuous(m, f) { if (m.isContinuous()) return f(m); const c = m.clone(); try { return f(c); } finally { c.delete(); } }
+    ctx.pixelAt = pixelAt; ctx.withContinuous = withContinuous;
+    /**
+     * 픽셀 반복용 배치 정보 캐시 (Mat 래퍼마다 한 번 계산): 형식 배열 · 채널 · 행 간격(요소 단위)
+     * 무효화: outMat() 으로 출력에 쓰일 때 · Create/Release/PushBack · 메모리 증가로 배열이 분리(length 0)됐을 때
+     */
+    function pixInfo(mat) {
+      const m = mat.cv;
+      let c = mat._pix;
+      if (c && c.m === m && c.a.length) return c;
+      const ch = m.channels(), rows = m.rows, cols = m.cols;
+      const cont = m.isContinuous();
+      const rowStep = cont ? cols * ch : (Array.isArray(m.step) ? m.step[0] : m.step) / m.elemSize1();
+      let a = DEPTH_ARR(m);
+      if (!cont && rows > 0) {
+        // ROI 의 data 배열은 행 × 열 길이뿐이라 행 간격을 따라가면 끝 행이 밖으로 나간다 → 같은 힙 위에 필요한 길이의 뷰를 만든다
+        const span = (rows - 1) * rowStep + cols * ch;
+        if (a.length < span) a = new a.constructor(a.buffer, a.byteOffset, span);
+      }
+      c = { m, a, ch, rows, cols, rowStep, depth: m.depth(), type: m.type() };
+      mat._pix = c;
+      return c;
+    }
+    ctx.pixInfo = pixInfo;
+    const checkYXp = (p, y, x) => { if (!Number.isInteger(y) || !Number.isInteger(x) || y < 0 || y >= p.rows || x < 0 || x >= p.cols) throw new CsException('IndexOutOfRangeException', `Mat 범위를 벗어난 좌표입니다: (행 y=${y}, 열 x=${x}) / 크기 ${p.rows}×${p.cols}. At<T>(y, x) 는 (행, 열) 순서입니다.`); };
     /** Get<T>(y, x): T 에 따라 값 · Vec 반환 */
     function matGet(mat, t, y, x) {
-      const m = mat.cv; checkYX(m, y, x);
-      const ch = m.channels(), a = DEPTH_ARR(m), base = (y * m.cols + x) * ch;
+      const p = pixInfo(mat); checkYXp(p, y, x);
+      const m = p.m, a = p.a, ch = p.ch, base = y * p.rowStep + x * ch;
       if (t in VEC_TYPES) { const n = VEC_TYPES[t][0]; if (n !== ch) throw new CsException('ArgumentException', `${t} 는 ${n}채널용인데 이 Mat 은 ${ch}채널(${new MatType(m.type()).csToString()})입니다`); return makeVec(t, Array.from({ length: n }, (_, k) => a[base + k])); }
       if (t === 'Point' || t === 'Point2f' || t === 'Point2d') { if (ch !== 2) throw new CsException('ArgumentException', `${t} 는 2채널 Mat 에서만 읽을 수 있습니다`); return t === 'Point' ? new Point(a[base], a[base + 1]) : t === 'Point2f' ? new Point2f(a[base], a[base + 1]) : new Point2d(a[base], a[base + 1]); }
       if (ch !== 1 && t !== 'Scalar') throw new CsException('ArgumentException', `이 Mat 은 ${ch}채널입니다. Get<Vec${ch}b>(y, x) 처럼 채널 수에 맞는 Vec 형식을 쓰세요`);
       if (t === 'Scalar') return new Scalar(...Array.from({ length: 4 }, (_, k) => (k < ch ? a[base + k] : 0)));
       const v = a[base];
-      const dt = DEPTH_T[m.depth()];
-      if (t && t !== dt && isIntegral(t) !== isIntegral(dt)) interp.host.note && interp.host.note(`Get<${t}> 를 ${new MatType(m.type()).csToString()} Mat 에 썼습니다. 자료형이 다르면 값이 이상하게 나옵니다 (Mat 의 실제 형식: ${dt})`);
+      const dt = DEPTH_T[p.depth];
+      if (t && t !== dt && isIntegral(t) !== isIntegral(dt) && !mat._warnedType) { mat._warnedType = true; if (interp.host.note) interp.host.note(`Get<${t}> 를 ${new MatType(p.type).csToString()} Mat 에 썼습니다. 자료형이 다르면 값이 이상하게 나옵니다 (Mat 의 실제 형식: ${dt})`); }
       return coerce(v, t || dt, interp);
     }
     function matSet(mat, t, y, x, v) {
-      const m = mat.cv; checkYX(m, y, x);
-      const ch = m.channels(), a = DEPTH_ARR(m), base = (y * m.cols + x) * ch;
+      const p = pixInfo(mat); checkYXp(p, y, x);
+      const a = p.a, ch = p.ch, base = y * p.rowStep + x * ch;
       if (v instanceof Vec) { for (let k = 0; k < Math.min(ch, v.n); k++) a[base + k] = v.items[k]; return; }
       if (v instanceof Scalar) { for (let k = 0; k < ch; k++) a[base + k] = v.at(k); return; }
       if (v instanceof Point || v instanceof Point2f || v instanceof Point2d) { a[base] = v.X; a[base + 1] = v.Y; return; }
@@ -440,7 +482,7 @@
       methods: {
         Size: method((i, m, a) => (a.length ? (num(a[0]) === 0 ? m.cv.rows : m.cv.cols) : new Size(m.cv.cols, m.cv.rows)), (ta, at) => (at && at.length ? 'int' : 'Size')),
         Channels: method((i, m) => m.cv.channels(), 'int'), Type: method((i, m) => new MatType(m.cv.type()), 'MatType'), Depth: method((i, m) => m.cv.depth(), 'int'),
-        Empty: method((i, m) => m.cv.empty(), 'bool'), Total: method((i, m) => m.cv.rows * m.cv.cols, 'long'), ElemSize: method((i, m) => m.cv.elemSize(), 'long'), ElemSize1: method((i, m) => m.cv.elemSize1(), 'long'), Step: method((i, m) => m.cv.step, 'long'), Step1: method((i, m) => m.cv.step / m.cv.elemSize1(), 'long'),
+        Empty: method((i, m) => m.cv.empty(), 'bool'), Total: method((i, m) => m.cv.rows * m.cv.cols, 'long'), ElemSize: method((i, m) => m.cv.elemSize(), 'long'), ElemSize1: method((i, m) => m.cv.elemSize1(), 'long'), Step: method((i, m) => (Array.isArray(m.cv.step) ? m.cv.step[0] : m.cv.step), 'long'), Step1: method((i, m) => (Array.isArray(m.cv.step) ? m.cv.step[0] : m.cv.step) / m.cv.elemSize1(), 'long'),
         IsContinuous: method((i, m) => m.cv.isContinuous(), 'bool'), IsSubmatrix: method((i, m) => !!m.isSub, 'bool'),
         Clone: method((i, m, a) => (a.length && a[0] instanceof Rect ? ctx.wrap(guard(() => { const r = m.cv.roi(toRect(a[0])); const c = r.clone(); r.delete(); return c; })) : ctx.wrap(m.cv.clone())), 'Mat'),
         CopyTo: method((i, m, a) => { const dst = outMat(a[0]); guard(() => (a.length > 1 && a[1] ? m.cv.copyTo(dst, asMat(a[1], 'mask')) : m.cv.copyTo(dst))); }),
@@ -462,14 +504,20 @@
         Split: method((i, m) => splitMat(m.cv), 'Mat[]'),
         GetArray: method((i, m, a, ta) => { const out = matToArray(m.cv, ta && ta[0]); if (a.length && a[0] instanceof Ref) { a[0].set(out); return true; } return out; }, (ta) => (ta && ta[0] ? ta[0] + '[]' : null)),
         GetRectangularArray: method((i, m, a, ta) => { const out = matToArray(m.cv, ta && ta[0], true); if (a.length && a[0] instanceof Ref) { a[0].set(out); return true; } return out; }, (ta) => (ta && ta[0] ? ta[0] + '[,]' : null)),
-        SetArray: method((i, m, a) => { const data = a[0]; const arrv = DEPTH_ARR(m.cv); const flat = Array.isArray(data) ? data : seqOf(data); for (let k = 0; k < Math.min(flat.length, arrv.length); k++) arrv[k] = flat[k] instanceof Vec ? flat[k].items[0] : toNum(flat[k], 'double', interp); }),
+        SetArray: method((i, m, a) => {
+          const data = a[0]; const flat = Array.isArray(data) ? data : seqOf(data);
+          const vals = []; for (const v of flat) { if (v instanceof Vec) vals.push(...v.items); else vals.push(toNum(v, 'double', interp)); }
+          const mc = m.cv, ch = mc.channels();
+          if (mc.isContinuous()) { const arrv = DEPTH_ARR(mc); for (let k = 0; k < Math.min(vals.length, arrv.length); k++) arrv[k] = vals[k]; return; }
+          let k = 0; for (let y = 0; y < mc.rows && k < vals.length; y++) for (let x = 0; x < mc.cols && k < vals.length; x++) { const p = pixelAt(mc, y, x); for (let c = 0; c < ch && k < vals.length; c++) p.a[p.base + c] = vals[k++]; }
+        }),
         ToBytes: method((i, m, a) => { const png = host.encodePng ? host.encodePng(matToRaw(m.cv)) : null; if (!png) throw new CsException('NotSupportedException', 'PNG 인코딩을 지원하지 않는 환경입니다'); return arr(Array.from(png), 'byte'); }, 'byte[]'),
         ImWrite: method((i, m, a) => imwrite(a[0], m), 'bool'), SaveImage: method((i, m, a) => imwrite(a[0], m), 'bool'),
         Dump: method((i, m) => dumpMat(m.cv), 'string'), ToString: method((i, m) => m.csToString(), 'string'),
-        Dispose: method((i, m) => m.dispose()), Release: method((i, m) => { guard(() => m.cv.release && m.cv.release()); }),
-        Create: method((i, m, a) => { if (a[0] instanceof Size) guard(() => m.cv.create(a[0].Height, a[0].Width, matTypeOf(a[1]))); else guard(() => m.cv.create(num(a[0]), num(a[1]), matTypeOf(a[2]))); }),
-        SetIdentity: method((i, m, a) => { m.cv.setTo(new cv.Scalar(0)); const n = Math.min(m.cv.rows, m.cv.cols), d = DEPTH_ARR(m.cv), ch = m.cv.channels(); for (let k = 0; k < n; k++) d[(k * m.cv.cols + k) * ch] = a.length ? toScalar(a[0]).Val0 : 1; }),
-        PushBack: method((i, m, a) => { const src = asMat(a[0]); if (m.cv.empty()) { src.copyTo(m.cv); return; } const d = new cv.Mat(); const v = new cv.MatVector(); v.push_back(m.cv); v.push_back(src); guard(() => cv.vconcat(v, d)); v.delete(); d.copyTo(m.cv); d.delete(); }),
+        Dispose: method((i, m) => m.dispose()), Release: method((i, m) => { m._pix = null; guard(() => m.cv.release && m.cv.release()); }),
+        Create: method((i, m, a) => { m._pix = null; if (a[0] instanceof Size) guard(() => m.cv.create(a[0].Height, a[0].Width, matTypeOf(a[1]))); else guard(() => m.cv.create(num(a[0]), num(a[1]), matTypeOf(a[2]))); }),
+        SetIdentity: method((i, m, a) => { m.cv.setTo(new cv.Scalar(0)); const n = Math.min(m.cv.rows, m.cv.cols); for (let k = 0; k < n; k++) { const p = pixelAt(m.cv, k, k); p.a[p.base] = a.length ? toScalar(a[0]).Val0 : 1; } }),
+        PushBack: method((i, m, a) => { m._pix = null; const src = asMat(a[0]); if (m.cv.empty()) { src.copyTo(m.cv); return; } const d = new cv.Mat(); const v = new cv.MatVector(); v.push_back(m.cv); v.push_back(src); guard(() => cv.vconcat(v, d)); v.delete(); d.copyTo(m.cv); d.delete(); }),
         ToBitmapSource: method(() => wpfStub('BitmapSource'), 'BitmapSource'), ToWriteableBitmap: method(() => wpfStub('WriteableBitmap'), 'WriteableBitmap'), ToBitmap: method(() => wpfStub('Bitmap'), 'Bitmap'),
         ToImage: method(() => wpfStub('Image'), 'Image'), ToMemoryStream: method((i, m) => { const png = host.encodePng ? host.encodePng(matToRaw(m.cv)) : new Uint8Array(0); return { __stream: png, __csTypeName: 'MemoryStream', csToString: () => 'MemoryStream', Position: 0 }; }, 'MemoryStream')
       },
@@ -500,22 +548,25 @@
       return matScale(b, toNum(a, 'double', interp));
     }
     function matCompare(v, op) { const a = v[0], b = v[1]; const d = newMat(); if (a instanceof Mat && b instanceof Mat) guard(() => cv.compare(a.cv, b.cv, d.cv, op)); else if (a instanceof Mat) { const t = scalarLike(b, a.cv); try { guard(() => cv.compare(a.cv, t, d.cv, op)); } finally { t.delete(); } } else { const t = scalarLike(a, b.cv); try { guard(() => cv.compare(t, b.cv, d.cv, op)); } finally { t.delete(); } } return d; }
-    function sumScalar(m) { const ch = m.channels(), a = DEPTH_ARR(m), s = [0, 0, 0, 0]; for (let k = 0; k < a.length; k++) s[k % ch] += a[k]; return new Scalar(s[0], s[1], s[2], s[3]); }
+    function sumScalar(m0) { return withContinuous(m0, (m) => { const ch = m.channels(), a = DEPTH_ARR(m), n = m.rows * m.cols * ch, s = [0, 0, 0, 0]; for (let k = 0; k < n; k++) s[k % ch] += a[k]; return new Scalar(s[0], s[1], s[2], s[3]); }); }
     ctx.sumScalar = sumScalar;
     function splitMat(m) { const vec = new cv.MatVector(); guard(() => cv.split(m, vec)); const out = []; for (let k = 0; k < vec.size(); k++) out.push(ctx.wrap(vec.get(k))); vec.delete(); out.__elem = 'Mat'; return out; }
     ctx.splitMat = splitMat;
-    function matToArray(m, t, rect) {
-      const a = DEPTH_ARR(m), ch = m.channels(), n = m.rows * m.cols;
-      const et = t || elemTOfMat(m);
-      let out;
-      if (et in VEC_TYPES) { out = []; for (let k = 0; k < n; k++) out.push(makeVec(et, Array.from({ length: ch }, (_, c) => a[k * ch + c]))); }
-      else { out = Array.from(a, (v) => coerce(v, et, interp)); }
-      out.__elem = et;
-      if (rect) { out.__dims = [m.rows, m.cols * (et in VEC_TYPES ? 1 : ch)]; }
-      return out;
+    function matToArray(m0, t, rect) {
+      return withContinuous(m0, (m) => {
+        const a = DEPTH_ARR(m), ch = m.channels(), n = m.rows * m.cols;
+        const et = t || elemTOfMat(m);
+        let out;
+        if (et in VEC_TYPES) { out = []; for (let k = 0; k < n; k++) out.push(makeVec(et, Array.from({ length: ch }, (_, c) => a[k * ch + c]))); }
+        else { out = Array.from(a.subarray(0, n * ch), (v) => coerce(v, et, interp)); }
+        out.__elem = et;
+        if (rect) { out.__dims = [m.rows, m.cols * (et in VEC_TYPES ? 1 : ch)]; }
+        return out;
+      });
     }
     ctx.matToArray = matToArray;
-    function dumpMat(m) { const a = DEPTH_ARR(m), ch = m.channels(); const rows = []; const f = m.depth() >= 5; for (let y = 0; y < m.rows; y++) { const row = []; for (let x = 0; x < m.cols; x++) { const cell = []; for (let c = 0; c < ch; c++) { const v = a[(y * m.cols + x) * ch + c]; cell.push(f ? R.numToString(v) : String(v)); } row.push(cell.join(', ')); } rows.push(row.join(', ')); } return '[' + rows.join(';\n ') + ']'; }
+    function dumpMat(m0) { return withContinuous(m0, dumpMatC); }
+    function dumpMatC(m) { const a = DEPTH_ARR(m), ch = m.channels(); const rows = []; const f = m.depth() >= 5; for (let y = 0; y < m.rows; y++) { const row = []; for (let x = 0; x < m.cols; x++) { const cell = []; for (let c = 0; c < ch; c++) { const v = a[(y * m.cols + x) * ch + c]; cell.push(f ? R.numToString(v) : String(v)); } row.push(cell.join(', ')); } rows.push(row.join(', ')); } return '[' + rows.join(';\n ') + ']'; }
     function imwrite(path, mat) { const p = str(path); if (!host.fs || !host.fs.write) throw new CsException('IOException', '이 환경에서는 파일을 저장할 수 없습니다'); const raw = matToRaw(mat.cv); const png = host.encodePng ? host.encodePng(raw) : null; if (!png) throw new CsException('NotSupportedException', 'PNG 인코딩을 지원하지 않는 환경입니다'); host.fs.write(p, png, raw); if (!/\.png$/i.test(p) && host.note) host.note(`imwrite: 브라우저 실습 환경은 항상 PNG 형식으로 저장합니다 (${p}).`); return true; }
     ctx.imwrite = imwrite;
     function makeIndexer(m, t) { return { __indexer: true, __csTypeName: 'MatIndexer', mat: m, t, csToString: () => `MatIndexer<${t || '?'}>` }; }
